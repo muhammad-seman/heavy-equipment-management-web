@@ -3,219 +3,278 @@
 namespace App\Http\Controllers\Api\V1\Users;
 
 use App\Http\Controllers\Api\BaseApiController;
+use App\Http\Requests\Api\V1\Users\StoreUserRequest;
+use App\Http\Requests\Api\V1\Users\UpdateUserRequest;
+use App\Http\Requests\Api\V1\Users\UpdateUserRolesRequest;
+use App\Http\Resources\Api\V1\Users\UserResource;
+use App\Http\Resources\Api\V1\Users\UserCollection;
 use App\Models\User;
+use App\Services\Users\UserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
 
 class UserController extends BaseApiController
 {
+    public function __construct(
+        protected UserService $userService
+    ) {}
+
+    /**
+     * Display a listing of users
+     */
     public function index(Request $request): JsonResponse
     {
-        $query = User::with('roles')->withCount('assignedEquipment');
-
-        if ($request->has('search')) {
-            $query->search($request->input('search'));
-        }
-
-        if ($request->has('department')) {
-            $query->byDepartment($request->input('department'));
-        }
-
-        if ($request->has('certification_level')) {
-            $query->byCertificationLevel($request->input('certification_level'));
-        }
-
-        if ($request->has('active_only') && $request->boolean('active_only')) {
-            $query->active();
-        }
-
-        if ($request->has('role')) {
-            $query->role($request->input('role'));
-        }
+        $filters = $request->only([
+            'search', 'role', 'department', 'certification_level', 
+            'is_active', 'has_certification', 'sort_by', 'sort_order'
+        ]);
 
         $perPage = min($request->input('per_page', 15), 100);
-        $users = $query->paginate($perPage);
-
-        return $this->successResponse($users);
-    }
-
-    public function show($id): JsonResponse
-    {
-        $user = User::with(['roles', 'assignedEquipment'])
-            ->withCount(['assignedEquipment', 'operatingSessions'])
-            ->findOrFail($id);
-
-        return $this->successResponse([
-            'id' => $user->id,
-            'first_name' => $user->first_name,
-            'last_name' => $user->last_name,
-            'full_name' => $user->full_name,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'employee_id' => $user->employee_id,
-            'department' => $user->department,
-            'position' => $user->position,
-            'certification_level' => $user->certification_level,
-            'certification_expiry' => $user->certification_expiry,
-            'has_active_certification' => $user->hasActiveCertification(),
-            'is_certification_expiring_soon' => $user->isCertificationExpiringSoon(),
-            'is_active' => $user->is_active,
-            'last_login' => $user->last_login,
-            'roles' => $user->getRoleNames(),
-            'permissions' => $user->getAllPermissions()->pluck('name'),
-            'assigned_equipment_count' => $user->assigned_equipment_count,
-            'operating_sessions_count' => $user->operating_sessions_count,
-            'assigned_equipment' => $user->assignedEquipment,
-            'created_at' => $user->created_at,
-        ]);
-    }
-
-    public function store(Request $request): JsonResponse
-    {
-        $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users',
-            'phone' => 'nullable|string|max:20',
-            'employee_id' => 'required|string|max:50|unique:users',
-            'department' => 'required|string|max:255',
-            'position' => 'required|string|max:255',
-            'certification_level' => 'required|in:basic,intermediate,advanced,expert',
-            'certification_expiry' => 'nullable|date|after:today',
-            'password' => 'required|string|min:8',
-            'roles' => 'sometimes|array',
-            'roles.*' => 'exists:roles,name',
-        ]);
-
-        $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'employee_id' => $request->employee_id,
-            'department' => $request->department,
-            'position' => $request->position,
-            'certification_level' => $request->certification_level,
-            'certification_expiry' => $request->certification_expiry,
-            'password' => Hash::make($request->password),
-            'is_active' => true,
-        ]);
-
-        if ($request->has('roles')) {
-            $user->assignRole($request->roles);
-        }
-
-        return $this->successResponse($user->load('roles'), 'User created successfully', [], 201);
-    }
-
-    public function update(Request $request, $id): JsonResponse
-    {
-        $user = User::findOrFail($id);
-
-        $request->validate([
-            'first_name' => 'sometimes|string|max:255',
-            'last_name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $id,
-            'phone' => 'nullable|string|max:20',
-            'employee_id' => 'sometimes|string|max:50|unique:users,employee_id,' . $id,
-            'department' => 'sometimes|string|max:255',
-            'position' => 'sometimes|string|max:255',
-            'certification_level' => 'sometimes|in:basic,intermediate,advanced,expert',
-            'certification_expiry' => 'nullable|date',
-            'is_active' => 'sometimes|boolean',
-            'roles' => 'sometimes|array',
-            'roles.*' => 'exists:roles,name',
-        ]);
-
-        $user->update($request->except(['roles']));
-
-        if ($request->has('roles')) {
-            $user->syncRoles($request->roles);
-        }
-
-        return $this->successResponse($user->load('roles'), 'User updated successfully');
-    }
-
-    public function destroy($id): JsonResponse
-    {
-        $user = User::findOrFail($id);
-
-        if ($user->assignedEquipment()->count() > 0) {
-            return $this->errorResponse('Cannot delete user who has equipment assigned', 422);
-        }
-
-        $user->delete();
-
-        return $this->successResponse(null, 'User deleted successfully');
-    }
-
-    public function assignRole(Request $request, $id): JsonResponse
-    {
-        $request->validate([
-            'role' => 'required|exists:roles,name',
-        ]);
-
-        $user = User::findOrFail($id);
-        $user->assignRole($request->role);
-
-        return $this->successResponse($user->load('roles'), 'Role assigned successfully');
-    }
-
-    public function removeRole(Request $request, $id): JsonResponse
-    {
-        $request->validate([
-            'role' => 'required|exists:roles,name',
-        ]);
-
-        $user = User::findOrFail($id);
-        $user->removeRole($request->role);
-
-        return $this->successResponse($user->load('roles'), 'Role removed successfully');
-    }
-
-    public function activate($id): JsonResponse
-    {
-        $user = User::findOrFail($id);
-        $user->update(['is_active' => true]);
-
-        return $this->successResponse($user, 'User activated successfully');
-    }
-
-    public function deactivate($id): JsonResponse
-    {
-        $user = User::findOrFail($id);
         
-        if ($user->assignedEquipment()->count() > 0) {
-            return $this->errorResponse('Cannot deactivate user who has equipment assigned', 422);
-        }
+        $users = $this->userService->getFilteredUsers($filters, $perPage);
 
-        $user->update(['is_active' => false]);
-
-        return $this->successResponse($user, 'User deactivated successfully');
+        return $this->successResponse(
+            new UserCollection($users),
+            'Users retrieved successfully',
+            []
+        );
     }
 
+    /**
+     * Display the specified user
+     */
+    public function show(User $user): JsonResponse
+    {
+        $userWithDetails = $this->userService->getUserWithDetails($user);
+
+        return $this->successResponse(
+            new UserResource($userWithDetails),
+            'User retrieved successfully',
+            []
+        );
+    }
+
+    /**
+     * Store a newly created user
+     */
+    public function store(StoreUserRequest $request): JsonResponse
+    {
+        $user = $this->userService->createUser(
+            $request->validated(), 
+            $request->user()
+        );
+
+        return $this->successResponse(
+            new UserResource($user),
+            'User created successfully',
+            [],
+            201
+        );
+    }
+
+    /**
+     * Update the specified user
+     */
+    public function update(UpdateUserRequest $request, User $user): JsonResponse
+    {
+        $updatedUser = $this->userService->updateUser(
+            $user, 
+            $request->validated(), 
+            $request->user()
+        );
+
+        return $this->successResponse(
+            new UserResource($updatedUser),
+            'User updated successfully',
+            []
+        );
+    }
+
+    /**
+     * Remove the specified user from storage (soft delete)
+     */
+    public function destroy(User $user): JsonResponse
+    {
+        $this->userService->deleteUser($user, request()->user());
+
+        return $this->successResponse(
+            null,
+            'User deleted successfully',
+            []
+        );
+    }
+
+    /**
+     * Get operators list (specialized endpoint)
+     */
     public function operators(Request $request): JsonResponse
     {
         $operators = User::role('operator')
-            ->active()
+            ->where('is_active', true)
             ->with(['assignedEquipment'])
             ->withCount('assignedEquipment')
             ->get();
 
-        return $this->successResponse($operators);
+        return $this->successResponse(
+            new UserCollection(collect($operators)),
+            'Operators retrieved successfully',
+            []
+        );
     }
 
-    public function resetPassword(Request $request, $id): JsonResponse
+    /**
+     * Restore a soft-deleted user
+     */
+    public function restore(int $userId): JsonResponse
     {
-        $request->validate([
-            'new_password' => 'required|string|min:8',
+        $user = $this->userService->restoreUser($userId, request()->user());
+
+        return $this->successResponse(
+            new UserResource($user),
+            'User restored successfully',
+            []
+        );
+    }
+
+    /**
+     * Activate or deactivate a user
+     */
+    public function activate(User $user): JsonResponse
+    {
+        $updatedUser = $this->userService->toggleUserStatus($user, request()->user());
+
+        $status = $updatedUser->is_active ? 'activated' : 'deactivated';
+        
+        return $this->successResponse(
+            new UserResource($updatedUser),
+            "User {$status} successfully",
+            []
+        );
+    }
+
+    /**
+     * Update user roles
+     */
+    public function updateRoles(UpdateUserRolesRequest $request, User $user): JsonResponse
+    {
+        $updatedUser = $this->userService->updateUserRoles(
+            $user, 
+            $request->validated()['roles'], 
+            $request->user()
+        );
+
+        return $this->successResponse(
+            new UserResource($updatedUser),
+            'User roles updated successfully',
+            []
+        );
+    }
+
+    /**
+     * Get user activity summary
+     */
+    public function activity(User $user, Request $request): JsonResponse
+    {
+        $days = $request->input('days', 30);
+        
+        $activity = $this->userService->getUserActivitySummary($user, $days);
+
+        return $this->successResponse(
+            $activity,
+            'User activity retrieved successfully',
+            []
+        );
+    }
+
+    /**
+     * Get user's assigned equipment
+     */
+    public function assignedEquipment(User $user): JsonResponse
+    {
+        $equipment = $this->userService->getUserEquipment($user);
+
+        return $this->successResponse(
+            $equipment,
+            'User assigned equipment retrieved successfully',
+            []
+        );
+    }
+
+    /**
+     * Get user profile for authenticated user
+     */
+    public function profile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $profile = $this->userService->getUserProfile($user);
+
+        return $this->successResponse(
+            new UserResource($profile),
+            'User profile retrieved successfully',
+            []
+        );
+    }
+
+    /**
+     * Update user profile for authenticated user
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        // Basic validation for profile update
+        $validated = $request->validate([
+            'first_name' => 'sometimes|required|string|max:255',
+            'last_name' => 'sometimes|required|string|max:255',
+            'phone' => 'sometimes|nullable|string|max:20',
+            'emergency_contact_name' => 'sometimes|nullable|string|max:255',
+            'emergency_contact_phone' => 'sometimes|nullable|string|max:20',
         ]);
 
-        $user = User::findOrFail($id);
-        $user->update(['password' => Hash::make($request->new_password)]);
+        $user = $request->user();
+        $updatedUser = $this->userService->updateUserProfile($user, $validated);
 
-        return $this->successResponse(null, 'Password reset successfully');
+        return $this->successResponse(
+            new UserResource($updatedUser),
+            'Profile updated successfully',
+            []
+        );
+    }
+
+    /**
+     * Get users statistics for dashboard
+     */
+    public function statistics(): JsonResponse
+    {
+        $stats = $this->userService->getUserStatistics();
+
+        return $this->successResponse(
+            $stats,
+            'User statistics retrieved successfully',
+            []
+        );
+    }
+
+    /**
+     * Search users with basic info only
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $query = $request->input('q', '');
+        $limit = min($request->input('limit', 10), 50);
+        
+        if (strlen($query) < 2) {
+            return $this->successResponse(
+                [],
+                'Search query must be at least 2 characters',
+                []
+            );
+        }
+
+        $users = $this->userService->searchUsers($query, $limit);
+
+        return $this->successResponse(
+            $users,
+            'Users search completed',
+            []
+        );
     }
 }

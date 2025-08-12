@@ -77,7 +77,7 @@ class User extends Authenticatable
      */
     public function assignedEquipment(): HasMany
     {
-        return $this->hasMany(Equipment::class, 'assigned_user_id');
+        return $this->hasMany(Equipment::class, 'assigned_to_user');
     }
 
     /**

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1\Equipment;
 
 use App\Http\Controllers\Api\BaseApiController;
+use App\Http\Requests\Api\V1\Equipment\StoreEquipmentRequest;
+use App\Http\Requests\Api\V1\Equipment\UpdateEquipmentRequest;
 use App\Models\Equipment;
 use App\Models\EquipmentStatusLog;
 use Illuminate\Http\JsonResponse;

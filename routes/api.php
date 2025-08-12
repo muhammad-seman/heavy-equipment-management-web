@@ -35,26 +35,49 @@ Route::prefix('v1')->group(function () {
         
         // User Management Routes
         Route::middleware(['api.permission:users.view'])->group(function () {
-            Route::apiResource('users', \App\Http\Controllers\Api\V1\Auth\UserController::class);
-            Route::post('users/{user}/restore', [\App\Http\Controllers\Api\V1\Auth\UserController::class, 'restore'])
+            Route::apiResource('users', \App\Http\Controllers\Api\V1\Users\UserController::class);
+            Route::post('users/{user}/restore', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'restore'])
                 ->middleware('api.permission:users.create');
-            Route::put('users/{user}/activate', [\App\Http\Controllers\Api\V1\Auth\UserController::class, 'activate'])
+            Route::put('users/{user}/activate', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'activate'])
                 ->middleware('api.permission:users.edit');
-            Route::put('users/{user}/roles', [\App\Http\Controllers\Api\V1\Auth\UserController::class, 'updateRoles'])
+            Route::put('users/{user}/roles', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'updateRoles'])
                 ->middleware('api.permission:users.edit');
+            
+            // Additional user routes
+            Route::get('users/{user}/activity', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'activity']);
+            Route::get('users/{user}/assigned-equipment', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'assignedEquipment']);
+            Route::get('users/search', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'search']);
+            Route::get('users/statistics', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'statistics'])
+                ->middleware('api.permission:users.view_statistics');
         });
+
+        // User Profile Routes (accessible to all authenticated users)
+        Route::get('profile', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'profile']);
+        Route::put('profile', [\App\Http\Controllers\Api\V1\Users\UserController::class, 'updateProfile']);
 
         // Role & Permission Management
         Route::middleware(['api.permission:roles.view'])->group(function () {
-            Route::apiResource('roles', \App\Http\Controllers\Api\V1\Auth\RoleController::class);
-            Route::put('roles/{role}/permissions', [\App\Http\Controllers\Api\V1\Auth\RoleController::class, 'updatePermissions'])
-                ->middleware('api.permission:roles.edit');
+            // Static routes first (before resource routes)
+            Route::get('roles/search', [\App\Http\Controllers\Api\V1\System\RoleController::class, 'search']);
+            Route::get('roles/hierarchy', [\App\Http\Controllers\Api\V1\System\RoleController::class, 'hierarchy']);
+            Route::get('roles/statistics', [\App\Http\Controllers\Api\V1\System\RoleController::class, 'statistics'])
+                ->middleware('api.permission:roles.view_statistics');
+            
+            // Resource routes
+            Route::apiResource('roles', \App\Http\Controllers\Api\V1\System\RoleController::class);
+            
+            // Additional role-specific routes
+            Route::put('roles/{role}/permissions', [\App\Http\Controllers\Api\V1\System\RoleController::class, 'updatePermissions'])
+                ->middleware('api.permission:permissions.assign');
+            Route::get('roles/{role}/users', [\App\Http\Controllers\Api\V1\System\RoleController::class, 'users']);
+            Route::post('roles/{role}/clone', [\App\Http\Controllers\Api\V1\System\RoleController::class, 'clone'])
+                ->middleware('api.permission:roles.create');
         });
         
-        Route::get('permissions', [\App\Http\Controllers\Api\V1\Auth\PermissionController::class, 'index'])
-            ->middleware('api.permission:permissions.view');
-        Route::get('permissions/modules', [\App\Http\Controllers\Api\V1\Auth\PermissionController::class, 'modules'])
-            ->middleware('api.permission:permissions.view');
+        // Route::get('permissions', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'index'])
+        //     ->middleware('api.permission:permissions.view');
+        // Route::get('permissions/modules', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'modules'])
+        //     ->middleware('api.permission:permissions.view');
 
         // Equipment Management Routes
         Route::middleware(['api.permission:equipment.view'])->group(function () {
@@ -72,66 +95,66 @@ Route::prefix('v1')->group(function () {
             Route::post('equipment/{equipment}/restore', [\App\Http\Controllers\Api\V1\Equipment\EquipmentController::class, 'restore'])
                 ->middleware('api.permission:equipment.create');
             
-            // Equipment Status Management
-            Route::put('equipment/{equipment}/status', [\App\Http\Controllers\Api\V1\Equipment\EquipmentStatusController::class, 'update'])
-                ->middleware('api.permission:equipment.edit');
-            Route::get('equipment/{equipment}/status-history', [\App\Http\Controllers\Api\V1\Equipment\EquipmentStatusController::class, 'history']);
+            // Equipment Status Management (TODO: Implement EquipmentStatusController)
+            // Route::put('equipment/{equipment}/status', [\App\Http\Controllers\Api\V1\Equipment\EquipmentStatusController::class, 'update'])
+            //     ->middleware('api.permission:equipment.edit');
+            // Route::get('equipment/{equipment}/status-history', [\App\Http\Controllers\Api\V1\Equipment\EquipmentStatusController::class, 'history']);
             
-            // Equipment Location
-            Route::put('equipment/{equipment}/location', [\App\Http\Controllers\Api\V1\Equipment\EquipmentLocationController::class, 'update'])
-                ->middleware('api.permission:equipment.edit');
-            Route::get('equipment/{equipment}/location-history', [\App\Http\Controllers\Api\V1\Equipment\EquipmentLocationController::class, 'history']);
+            // Equipment Location (TODO: Implement EquipmentLocationController)
+            // Route::put('equipment/{equipment}/location', [\App\Http\Controllers\Api\V1\Equipment\EquipmentLocationController::class, 'update'])
+            //     ->middleware('api.permission:equipment.edit');
+            // Route::get('equipment/{equipment}/location-history', [\App\Http\Controllers\Api\V1\Equipment\EquipmentLocationController::class, 'history']);
             
-            // Equipment Assignment
-            Route::put('equipment/{equipment}/assign', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'assign'])
-                ->middleware('api.permission:equipment.edit');
-            Route::put('equipment/{equipment}/unassign', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'unassign'])
-                ->middleware('api.permission:equipment.edit');
-            Route::get('equipment/assigned', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'assignedToUser']);
+            // Equipment Assignment (TODO: Implement EquipmentAssignmentController)
+            // Route::put('equipment/{equipment}/assign', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'assign'])
+            //     ->middleware('api.permission:equipment.edit');
+            // Route::put('equipment/{equipment}/unassign', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'unassign'])
+            //     ->middleware('api.permission:equipment.edit');
+            // Route::get('equipment/assigned', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'assignedToUser']);
         });
 
-        // Equipment Documents (with file upload throttling)
-        Route::middleware(['api.permission:equipment.view', 'api.throttle:api-upload'])->group(function () {
-            Route::get('equipment/{equipment}/documents', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'index']);
-            Route::post('equipment/{equipment}/documents', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'store'])
-                ->middleware('api.permission:equipment.edit');
-            Route::get('equipment/{equipment}/documents/{document}', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'show']);
-            Route::put('equipment/{equipment}/documents/{document}', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'update'])
-                ->middleware('api.permission:equipment.edit');
-            Route::delete('equipment/{equipment}/documents/{document}', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'destroy'])
-                ->middleware('api.permission:equipment.edit');
-        });
+        // Equipment Documents (TODO: Implement EquipmentDocumentController)
+        // Route::middleware(['api.permission:equipment.view', 'api.throttle:api-upload'])->group(function () {
+        //     Route::get('equipment/{equipment}/documents', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'index']);
+        //     Route::post('equipment/{equipment}/documents', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'store'])
+        //         ->middleware('api.permission:equipment.edit');
+        //     Route::get('equipment/{equipment}/documents/{document}', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'show']);
+        //     Route::put('equipment/{equipment}/documents/{document}', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'update'])
+        //         ->middleware('api.permission:equipment.edit');
+        //     Route::delete('equipment/{equipment}/documents/{document}', [\App\Http\Controllers\Api\V1\Equipment\EquipmentDocumentController::class, 'destroy'])
+        //         ->middleware('api.permission:equipment.edit');
+        // });
 
-        // System Settings
-        Route::middleware(['api.permission:system.view'])->group(function () {
-            Route::get('settings', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'index']);
-            Route::get('settings/{key}', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'show']);
-            Route::put('settings', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'updateMultiple'])
-                ->middleware('api.permission:system.edit');
-            Route::put('settings/{key}', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'update'])
-                ->middleware('api.permission:system.edit');
-        });
+        // System Settings (TODO: Implement SettingsController)
+        // Route::middleware(['api.permission:system.view'])->group(function () {
+        //     Route::get('settings', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'index']);
+        //     Route::get('settings/{key}', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'show']);
+        //     Route::put('settings', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'updateMultiple'])
+        //         ->middleware('api.permission:system.edit');
+        //     Route::put('settings/{key}', [\App\Http\Controllers\Api\V1\System\SettingsController::class, 'update'])
+        //         ->middleware('api.permission:system.edit');
+        // });
 
-        // Activity Logs
-        Route::middleware(['api.permission:system.view'])->group(function () {
-            Route::get('activity-logs', [\App\Http\Controllers\Api\V1\System\ActivityLogController::class, 'index']);
-            Route::get('activity-logs/user/{user}', [\App\Http\Controllers\Api\V1\System\ActivityLogController::class, 'userLogs']);
-            Route::get('activity-logs/equipment/{equipment}', [\App\Http\Controllers\Api\V1\System\ActivityLogController::class, 'equipmentLogs']);
-        });
+        // Activity Logs (TODO: Implement ActivityLogController)
+        // Route::middleware(['api.permission:system.view'])->group(function () {
+        //     Route::get('activity-logs', [\App\Http\Controllers\Api\V1\System\ActivityLogController::class, 'index']);
+        //     Route::get('activity-logs/user/{user}', [\App\Http\Controllers\Api\V1\System\ActivityLogController::class, 'userLogs']);
+        //     Route::get('activity-logs/equipment/{equipment}', [\App\Http\Controllers\Api\V1\System\ActivityLogController::class, 'equipmentLogs']);
+        // });
 
-        // Notifications
-        Route::get('notifications', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'index']);
-        Route::put('notifications/{notification}/read', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'markAsRead']);
-        Route::put('notifications/mark-all-read', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'markAllAsRead']);
-        Route::delete('notifications/{notification}', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'destroy']);
+        // Notifications (TODO: Implement NotificationController)
+        // Route::get('notifications', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'index']);
+        // Route::put('notifications/{notification}/read', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'markAsRead']);
+        // Route::put('notifications/mark-all-read', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'markAllAsRead']);
+        // Route::delete('notifications/{notification}', [\App\Http\Controllers\Api\V1\System\NotificationController::class, 'destroy']);
 
-        // Heavy Operations (reports, exports) - Limited rate limiting
-        Route::middleware(['api.throttle:api-heavy'])->group(function () {
-            Route::get('reports/equipment-utilization', [\App\Http\Controllers\Api\V1\System\ReportController::class, 'equipmentUtilization'])
-                ->middleware('api.permission:reports.view');
-            Route::post('reports/export', [\App\Http\Controllers\Api\V1\System\ReportController::class, 'export'])
-                ->middleware('api.permission:reports.export');
-        });
+        // Heavy Operations (TODO: Implement ReportController)
+        // Route::middleware(['api.throttle:api-heavy'])->group(function () {
+        //     Route::get('reports/equipment-utilization', [\App\Http\Controllers\Api\V1\System\ReportController::class, 'equipmentUtilization'])
+        //         ->middleware('api.permission:reports.view');
+        //     Route::post('reports/export', [\App\Http\Controllers\Api\V1\System\ReportController::class, 'export'])
+        //         ->middleware('api.permission:reports.export');
+        // });
     });
 });
 

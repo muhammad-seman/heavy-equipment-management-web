@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Manufacturer extends Model
 {
 
     protected $fillable = [
         'name',
+        'code',
         'country',
         'website',
         'contact_email',
@@ -23,12 +25,18 @@ class Manufacturer extends Model
         'is_active' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
 
-    public function equipmentTypes(): HasMany
+    public function equipmentTypes()
     {
-        return $this->hasMany(EquipmentType::class);
+        return $this->hasManyThrough(
+            EquipmentType::class,
+            Equipment::class,
+            'manufacturer_id', // Foreign key on equipment table
+            'id', // Foreign key on equipment_types table
+            'id', // Local key on manufacturers table
+            'equipment_type_id' // Local key on equipment table
+        )->distinct();
     }
 
     public function equipment(): HasMany
