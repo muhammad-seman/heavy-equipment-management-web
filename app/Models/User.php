@@ -1,40 +1,50 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
+/**
+ * User Model
+ * 
+ * Represents users in the Heavy Equipment Management system.
+ * Includes authentication, authorization, and user profile management.
+ */
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasFactory, Notifiable, HasApiTokens, HasRoles, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $fillable = [
-        'name',
+        'first_name',
+        'last_name',
         'email',
         'phone',
         'employee_id',
-        'status',
+        'department',
+        'position',
+        'certification_level',
+        'certification_expiry',
+        'is_active',
         'password',
-        'avatar',
-        'preferences',
-        'last_login_at',
     ];
 
     /**
      * The attributes that should be hidden for serialization.
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $hidden = [
         'password',
@@ -42,7 +52,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
+     * The attributes that should be cast.
      *
      * @return array<string, string>
      */
@@ -50,78 +60,164 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'last_login_at' => 'datetime',
+            'certification_expiry' => 'date',
+            'last_login' => 'datetime',
+            'is_active' => 'boolean',
             'password' => 'hashed',
-            'preferences' => 'json',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 
-    public function roles(): BelongsToMany
+    /**
+     * Equipment assigned to this user
+     *
+     * @return HasMany
+     */
+    public function assignedEquipment(): HasMany
     {
-        return $this->belongsToMany(Role::class, 'user_role')
-            ->withPivot(['assigned_at', 'assigned_by'])
-            ->withTimestamps();
+        return $this->hasMany(Equipment::class, 'assigned_user_id');
     }
 
-    public function hasRole(string $role): bool
+    /**
+     * Equipment documents uploaded by this user
+     *
+     * @return HasMany
+     */
+    public function uploadedDocuments(): HasMany
     {
-        return $this->roles()->where('slug', $role)->exists();
+        return $this->hasMany(EquipmentDocument::class, 'uploaded_by');
     }
 
-    public function hasPermission(string $permission): bool
+    /**
+     * Operating sessions by this user
+     *
+     * @return HasMany
+     */
+    public function operatingSessions(): HasMany
     {
-        return $this->roles()
-            ->whereHas('permissions', function ($query) use ($permission) {
-                $query->where('slug', $permission);
-            })->exists();
+        return $this->hasMany(OperatingSession::class, 'operator_id');
     }
 
-    public function hasAnyRole(array $roles): bool
+    /**
+     * Notifications for this user
+     *
+     * @return HasMany
+     */
+    public function notifications(): HasMany
     {
-        return $this->roles()->whereIn('slug', $roles)->exists();
+        return $this->hasMany(Notification::class);
     }
 
-    public function hasAllRoles(array $roles): bool
+    /**
+     * Activity logs for this user
+     *
+     * @return HasMany
+     */
+    public function activityLogs(): HasMany
     {
-        $userRoles = $this->roles()->pluck('slug')->toArray();
-        return empty(array_diff($roles, $userRoles));
+        return $this->hasMany(ActivityLog::class);
     }
 
-    public function assignRole(string $roleSlug, int $assignedBy = null): bool
+    /**
+     * Get user's full name
+     *
+     * @return string
+     */
+    public function getFullNameAttribute(): string
     {
-        $role = Role::where('slug', $roleSlug)->first();
-        if (!$role) {
+        return trim("{$this->first_name} {$this->last_name}");
+    }
+
+    /**
+     * Check if user has active certification
+     *
+     * @return bool
+     */
+    public function hasActiveCertification(): bool
+    {
+        if (!$this->certification_expiry) {
+            return true; // No expiry means permanent certification
+        }
+
+        return $this->certification_expiry->isFuture();
+    }
+
+    /**
+     * Check if certification is expiring soon (within 30 days)
+     *
+     * @return bool
+     */
+    public function isCertificationExpiringSoon(): bool
+    {
+        if (!$this->certification_expiry) {
             return false;
         }
 
-        $this->roles()->attach($role->id, [
-            'assigned_at' => now(),
-            'assigned_by' => $assignedBy,
-        ]);
-
-        return true;
+        return $this->certification_expiry->isAfter(now()) 
+            && $this->certification_expiry->isBefore(now()->addDays(30));
     }
 
-    public function removeRole(string $roleSlug): bool
+    /**
+     * Update last login timestamp
+     *
+     * @return void
+     */
+    public function updateLastLogin(): void
     {
-        $role = Role::where('slug', $roleSlug)->first();
-        if (!$role) {
-            return false;
-        }
-
-        $this->roles()->detach($role->id);
-        return true;
+        $this->update(['last_login' => now()]);
     }
 
+    /**
+     * Scope to get only active users
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
     public function scopeActive($query)
     {
-        return $query->where('status', 'active');
+        return $query->where('is_active', true);
     }
 
-    public function scopeByRole($query, string $role)
+    /**
+     * Scope to get users by certification level
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $level
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeByCertificationLevel($query, string $level)
     {
-        return $query->whereHas('roles', function ($q) use ($role) {
-            $q->where('slug', $role);
+        return $query->where('certification_level', $level);
+    }
+
+    /**
+     * Scope to get users by department
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $department
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeByDepartment($query, string $department)
+    {
+        return $query->where('department', $department);
+    }
+
+    /**
+     * Scope to search users by name or employee ID
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $search
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeSearch($query, string $search)
+    {
+        return $query->where(function ($q) use ($search) {
+            $q->where('first_name', 'like', "%{$search}%")
+              ->orWhere('last_name', 'like', "%{$search}%")
+              ->orWhere('employee_id', 'like', "%{$search}%")
+              ->orWhere('email', 'like', "%{$search}%");
         });
     }
 }
