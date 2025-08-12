@@ -74,10 +74,26 @@ Route::prefix('v1')->group(function () {
                 ->middleware('api.permission:roles.create');
         });
         
-        // Route::get('permissions', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'index'])
-        //     ->middleware('api.permission:permissions.view');
-        // Route::get('permissions/modules', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'modules'])
-        //     ->middleware('api.permission:permissions.view');
+        // Permission Management
+        Route::middleware(['api.permission:permissions.view'])->group(function () {
+            // Static routes first (before resource routes)
+            Route::get('permissions/search', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'search']);
+            Route::get('permissions/modules', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'modules']);
+            Route::get('permissions/statistics', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'statistics']);
+            Route::get('permissions/category/{category}', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'byCategory']);
+            Route::post('permissions/sync', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'sync'])
+                ->middleware('api.permission:permissions.assign');
+            Route::post('permissions/bulk-assign', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'bulkAssign'])
+                ->middleware('api.permission:permissions.assign');
+            
+            // Resource routes
+            Route::apiResource('permissions', \App\Http\Controllers\Api\V1\System\PermissionController::class)
+                ->except(['store', 'update', 'destroy']); // Only allow viewing for now
+            
+            // Permission-specific routes
+            Route::get('permissions/{permission}/roles', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'roles']);
+            Route::get('permissions/{permission}/usage', [\App\Http\Controllers\Api\V1\System\PermissionController::class, 'usage']);
+        });
 
         // Equipment Management Routes
         Route::middleware(['api.permission:equipment.view'])->group(function () {
@@ -111,6 +127,41 @@ Route::prefix('v1')->group(function () {
             // Route::put('equipment/{equipment}/unassign', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'unassign'])
             //     ->middleware('api.permission:equipment.edit');
             // Route::get('equipment/assigned', [\App\Http\Controllers\Api\V1\Equipment\EquipmentAssignmentController::class, 'assignedToUser']);
+        });
+
+        // Inspection Management Routes
+        Route::middleware(['api.permission:inspection.view'])->group(function () {
+            // Static routes first (before resource routes)
+            Route::get('inspections/search', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'search']);
+            Route::get('inspections/statistics', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'statistics'])
+                ->middleware('api.permission:inspection.view');
+            Route::get('inspections/summary', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'summary']);
+            Route::get('inspections/today', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'today']);
+            Route::get('inspections/this-week', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'thisWeek']);
+            Route::get('inspections/overdue', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'overdue']);
+            Route::get('inspections/requires-action', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'requiresAction']);
+            Route::get('inspections/types', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'types']);
+            Route::get('inspections/statuses', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'statuses']);
+            Route::get('inspections/results', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'results']);
+            Route::get('inspections/equipment/{equipmentId}', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'byEquipment']);
+            Route::get('inspections/inspector/{inspectorId}', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'byInspector']);
+            
+            // Resource routes
+            Route::apiResource('inspections', \App\Http\Controllers\Api\V1\Inspections\InspectionController::class);
+            
+            // Inspection-specific routes
+            Route::post('inspections/{inspection}/restore', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'restore'])
+                ->middleware('api.permission:inspection.create');
+            Route::put('inspections/{inspection}/start', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'start'])
+                ->middleware('api.permission:inspection.edit');
+            Route::put('inspections/{inspection}/complete', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'complete'])
+                ->middleware('api.permission:inspection.edit');
+            Route::put('inspections/{inspection}/cancel', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'cancel'])
+                ->middleware('api.permission:inspection.edit');
+            Route::post('inspections/{inspection}/duplicate', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'duplicate'])
+                ->middleware('api.permission:inspection.create');
+            Route::post('inspections/generate-from-template', [\App\Http\Controllers\Api\V1\Inspections\InspectionController::class, 'generateFromTemplate'])
+                ->middleware('api.permission:inspection.create');
         });
 
         // Equipment Documents (TODO: Implement EquipmentDocumentController)
